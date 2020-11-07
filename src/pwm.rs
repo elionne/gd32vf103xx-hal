@@ -6,6 +6,9 @@ use gd32vf103_pac::{TIMER0, TIMER1, TIMER2, TIMER3, TIMER4};
 use crate::gpio::{Alternate, PushPull};
 use crate::gpio::gpioa::*;
 use crate::gpio::gpiob::*;
+use crate::gpio::gpioc::*;
+use crate::gpio::gpiod::*;
+use crate::gpio::gpioe::*;
 use crate::rcu::{Rcu, Enable, Reset, BaseFrequency};
 use crate::time::{Hertz, U32Ext};
 
@@ -18,58 +21,92 @@ pub trait PwmChannelPin<TIMER, CHANNEL> {}
 
 
 macro_rules! pwm_pin {
-    ($timer:ty, $pin:ident, $ch:ident) => {
-        impl PwmChannelPin<$timer, $ch> for $pin<Alternate<PushPull>> {}
+    ($timer:ty: [ $($pin:ident => $ch:ident,)+ ]) => {
+        $(
+            impl PwmChannelPin<$timer, $ch> for $pin<Alternate<PushPull>> {}
+        )+
     }
 }
 
-pwm_pin!(TIMER0, PA8, CH0);
-pwm_pin!(TIMER0, PA9, CH1);
-pwm_pin!(TIMER0, PA10, CH2);
-pwm_pin!(TIMER0, PA11, CH3);
+pwm_pin!{
+    TIMER0: [
+        PA8 => CH0,
+        PA9 => CH1,
+        PA10 => CH2,
+        PA11 => CH3,
+    ]
+}
 
-pwm_pin!(TIMER1, PA0, CH0);
-pwm_pin!(TIMER1, PA1, CH1);
-pwm_pin!(TIMER1, PA2, CH2);
-pwm_pin!(TIMER1, PA3, CH3);
+pwm_pin!{
+    TIMER1: [
+        PA0 => CH0,
+        PA1 => CH1,
+        PA2 => CH2,
+        PA3 => CH3,
+    ]
+}
 
-pwm_pin!(TIMER2, PA6, CH0);
-pwm_pin!(TIMER2, PA7, CH1);
-pwm_pin!(TIMER2, PB0, CH2);
-pwm_pin!(TIMER2, PB1, CH3);
+pwm_pin!{
+    TIMER2: [
+        PA6 => CH0,
+        PA7 => CH1,
+        PB0 => CH2,
+        PB1 => CH3,
+    ]
+}
 
-pwm_pin!(TIMER3, PB6, CH0);
-pwm_pin!(TIMER3, PB7, CH1);
-pwm_pin!(TIMER3, PB8, CH2);
-pwm_pin!(TIMER3, PB9, CH3);
+pwm_pin!{
+    TIMER3: [
+        PB6 => CH0,
+        PB7 => CH1,
+        PB8 => CH2,
+        PB9 => CH3,
+    ]
+}
 
-pwm_pin!(TIMER4, PA3, CH3);
+pwm_pin!{
+    TIMER4: [ PA3 => CH3, ]
+}
 
 // Alternate mappings.
 
-pwm_pin!(TIMER0, PE9, CH0);
-pwm_pin!(TIMER0, PE11, CH1);
-pwm_pin!(TIMER0, PE13, CH2);
-pwm_pin!(TIMER0, PE14, CH3);
+pwm_pin!{
+    TIMER0: [
+        PE9 => CH0,
+        PE11 => CH1,
+        PE13 => CH2,
+        PE14 => CH3,
+    ]
+}
 
-pwn_pin!(TIMER1, PA15, CH0);
-pwn_pin!(TIMER1, PB3, CH1);
-pwn_pin!(TIMER1, PA10, CH2);
-pwn_pin!(TIMER1, PA11, CH3);
+pwm_pin!{
+    TIMER1: [
+        PA15 => CH0,
+        PB3 => CH1,
+        PA10 => CH2,
+        PA11 => CH3,
+    ]
+}
 
-pwn_pin!(TIMER2, PB4, CH0);
-pwn_pin!(TIMER2, PB5, CH1);
-pwn_pin!(TIMER2, PC6, CH0);
-pwn_pin!(TIMER2, PC7, CH1);
-pwn_pin!(TIMER2, PC8, CH2);
-pwn_pin!(TIMER2, PC9, CH3);
+pwm_pin!{
+    TIMER2: [
+        PB4 => CH0,
+        PB5 => CH1,
+        PC6 => CH0,
+        PC7 => CH1,
+        PC8 => CH2,
+        PC9 => CH3,
+    ]
+}
 
-pwn_pin!(TIMER3, PD12, CH0);
-pwn_pin!(TIMER3, PD13, CH1);
-pwn_pin!(TIMER3, PD14, CH2);
-pwn_pin!(TIMER3, PD15, CH3);
-
-
+pwm_pin!{
+    TIMER3: [
+        PD12 => CH0,
+        PD13 => CH1,
+        PD14 => CH2,
+        PD15 => CH3,
+    ]
+}
 
 pub struct PwmTimer<'a, TIMER> {
     timer: TIMER,
