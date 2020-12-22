@@ -108,7 +108,7 @@ pwm_pin!{
     TIMER1,
         NoRemap: [ch0: PA0, ch1: PA1, ch2: PA2, ch3: PA3 ],
         PartialRemap1: [ch0: PA15, ch1: PB3, ch2: PA2, ch3: PA3 ],
-        PartialRemap2: [ch0: PA0, ch1: PA1, ch2: PB10, ch3: PB1 ],
+        PartialRemap2: [ch0: PA0, ch1: PA1, ch2: PB10, ch3: PB11 ],
         FullRemap: [ch0: PA15, ch1: PB3, ch2: PB10, ch3: PB11 ],
 }
 
