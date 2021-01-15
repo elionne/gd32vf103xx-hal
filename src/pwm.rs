@@ -15,9 +15,8 @@ use crate::time::{Hertz, U32Ext};
 
 use core::marker::PhantomData;
 
-pub struct PwmConfiguration<TIMER, Remap> {
-    pub(crate) timer: TIMER,
-    _remap: PhantomData<Remap>,
+pub trait Pins<TIMER, Remap> {
+    fn remap(&self) -> Remap;
 }
 
 macro_rules! pwm_pin {
@@ -26,73 +25,12 @@ macro_rules! pwm_pin {
         ch2:$ch2_pin:ident, ch3:$ch3_pin:ident
     ],)+ ) => {
     $(
-        /// Implements a PWM TIMER configuration.
-        ///
-        /// The [`PwmConfiguration`] manage the configuration of a PWM Timer.
-        /// Choose a TIMER and a remap mode from [`NoRemap`], [`PartialRemap1`],
-        /// [`PartialRemap2`] and [`FullRemap`].
-        ///
-        /// Get the channel corresponding to remap associated pins with the
-        /// [`pins()`] function. And then [`configurue()`] the timer to get the
-        /// [`PwmTimer`] controller object:
-        ///
-        /// ```rust
-        /// // ...
-        ///
-        /// let pwm_t0 = PwmConfiguration::<TIMER0, NoRemap>::new(timer0, &mut afio);
-        /// let (_, ch1, ch2, _) = pwm_t0.pins(None, Some(&pa9), Some(&pa10), None);
-        /// let mut pwm_t0 = pwm_t0.configure(&mut rcu);
-        ///
-        /// // ...
-        /// pwm_t0.set_duty(ch1, 100);
-        ///
-        /// ```
-        impl PwmConfiguration<$timer, $remap> {
-            pub fn new(timer: $timer, afio: &mut Afio) -> Self
-            {
-                let remap = $remap;
-                <$timer>::remap(afio, remap.into());
-
-                PwmConfiguration {
-                    timer,
-                    _remap: PhantomData::<$remap>,
-                }
-            }
-
-            pub fn pins(
-                &self,
-                ch0: Option<&$ch0_pin<Alternate<PushPull>>>,
-                ch1: Option<&$ch1_pin<Alternate<PushPull>>>,
-                ch2: Option<&$ch2_pin<Alternate<PushPull>>>,
-                ch3: Option<&$ch3_pin<Alternate<PushPull>>>,
-                ) -> (Channel, Channel, Channel, Channel)
-            {
-                let ch0 = if ch0.is_some() {
-                    Channel::CH0
-                } else {
-                    Channel::NotUsed
-                };
-
-                let ch1 = if ch1.is_some() {
-                    Channel::CH1
-                } else {
-                    Channel::NotUsed
-                };
-
-                let ch2 = if ch2.is_some() {
-                    Channel::CH2
-                } else {
-                    Channel::NotUsed
-                };
-
-                let ch3 = if ch3.is_some() {
-                    Channel::CH3
-                } else {
-                    Channel::NotUsed
-                };
-
-                (ch0, ch1, ch2, ch3)
-            }
+        impl Pins<$timer, $remap> for (Option<&$ch0_pin<Alternate<PushPull>>>,
+                                       Option<&$ch1_pin<Alternate<PushPull>>>,
+                                       Option<&$ch2_pin<Alternate<PushPull>>>,
+                                       Option<&$ch3_pin<Alternate<PushPull>>>)
+        {
+            fn remap(&self) -> $remap { $remap {} }
         } )+
     }
 }
@@ -156,7 +94,7 @@ impl From<NoRemap> for u8 {
 }
 
 impl From<FullRemap> for bool {
-    fn from(_v: FullRemap) -> Self { false }
+    fn from(_v: FullRemap) -> Self { true }
 }
 
 impl From<FullRemap> for u8 {
@@ -177,26 +115,64 @@ pub enum Channel {
     CH1,
     CH2,
     CH3,
-    NotUsed,
 }
 
-pub struct PwmTimer<TIMER> {
+
+/// PWM TIMER configuration.
+///
+/// To create a new PWM TIMER you should choose a timer and a REMAP mode from
+/// [`NoRemap`], [`PartialRemap1`], [`PartialRemap2`] or [`FullRemap`].
+/// The tuple provided should contains only the pins you will use.
+///
+/// ```no_run
+/// use gd32vf103xx_hal as hal;
+/// use hal::pac::{Peripherals, TIMER0};
+/// use hal::gpio::GpioExt;
+/// use hal::rcu::RcuExt;
+/// use hal::afio::AfioExt;
+/// use hal::pwm::{PwmTimer, Channel, NoRemap};
+/// use embedded_hal::Pwm;
+///
+/// // ...
+/// let dp = Peripherals::take().unwrap();
+/// let mut rcu = dp.RCU.configure().freeze();
+///
+/// let gpioa = dp.GPIOA.split(&mut rcu);
+/// let pa9 = gpioa.pa9.into_alternate_push_pull();
+/// let pa10 = gpioa.pa10.into_alternate_push_pull();
+///
+/// let mut afio = dp.AFIO.constrain(&mut rcu);
+/// let timer0 = dp.TIMER0;
+
+/// let mut pwm_t0 = PwmTimer::<TIMER0, NoRemap>::new(
+///     timer0, (None, Some(&pa9), Some(&pa10), None), &mut rcu, &mut afio);
+///
+/// // ...
+/// pwm_t0.set_duty(Channel::CH1, 100);
+///
+/// ```
+pub struct PwmTimer<TIMER, REMAP> {
     timer: TIMER,
     timer_clock: Hertz,
     max_duty_cycle: u16,
     period: Hertz,
     duty: [u16; 4],
+    _remap: PhantomData<REMAP>,
 }
 
 macro_rules! advanced_pwm_timer {
     ($TIM:ident: $tim:ident) => {
-        impl<Remap> PwmConfiguration<$TIM, Remap> {
-            pub fn configure(self, rcu: &mut Rcu) -> PwmTimer<$TIM> {
+        impl<REMAP: Into<u8>> PwmTimer<$TIM, REMAP> {
+            pub fn new(
+              timer: $TIM,
+              pins: impl Pins<$TIM, REMAP>,
+              rcu: &mut Rcu, afio: &mut Afio) -> PwmTimer<$TIM, REMAP>
+            {
+
+                <$TIM>::remap(afio, pins.remap().into());
 
                 $TIM::enable(rcu);
                 $TIM::reset(rcu);
-
-                let timer = self.timer;
 
                 /* Advanced TIMER implements a BREAK function that deactivates
                 * the outputs. This bit automatically activates the output when
@@ -204,11 +180,12 @@ macro_rules! advanced_pwm_timer {
                 timer.cchp.modify(|_, w| w.oaen().set_bit());
 
                 PwmTimer{
-                    timer: timer,
+                    timer,
                     timer_clock: $TIM::base_frequency(rcu),
                     max_duty_cycle: 0,
                     period: 0.hz(),
                     duty: [0u16; 4],
+                    _remap: PhantomData::<REMAP>,
                 }
             }
         }
@@ -220,18 +197,24 @@ macro_rules! advanced_pwm_timer {
 
 macro_rules! general_pwm_timer {
     ($TIM:ident: $tim:ident) => {
-        impl<Remap> PwmConfiguration<$TIM, Remap> {
-            pub fn configure(self, rcu: &mut Rcu) -> PwmTimer<$TIM> {
+        impl<REMAP: Into<u8> + Into<bool> > PwmTimer<$TIM, REMAP> {
+            pub fn new<R: Into<u8> + Into<bool>>(
+            timer: $TIM,
+            pins: impl Pins<$TIM, REMAP>,
+            rcu: &mut Rcu, afio: &mut Afio) -> PwmTimer<$TIM, REMAP> {
+
+                 <$TIM>::remap(afio, pins.remap().into());
 
                 $TIM::enable(rcu);
                 $TIM::reset(rcu);
 
                 PwmTimer {
-                    timer: self.timer,
+                    timer,
                     timer_clock: $TIM::base_frequency(rcu),
                     max_duty_cycle: 0,
                     period: 0.hz(),
                     duty: [0u16; 4],
+                    _remap: PhantomData::<REMAP>,
                 }
             }
         }
@@ -242,7 +225,7 @@ macro_rules! general_pwm_timer {
 
 macro_rules! pwm_timer {
     ($TIM:ident: $tim:ident) => {
-        impl Pwm for PwmTimer<$TIM> {
+        impl<REMAP> Pwm for PwmTimer<$TIM, REMAP> {
             type Channel = Channel;
             type Time = Hertz;
             type Duty = u16;
@@ -253,7 +236,6 @@ macro_rules! pwm_timer {
                     Channel::CH1 => self.timer.chctl2.modify(|_r, w| w.ch1en().clear_bit()),
                     Channel::CH2 => self.timer.chctl2.modify(|_r, w| w.ch2en().clear_bit()),
                     Channel::CH3 => self.timer.chctl2.modify(|_r, w| w.ch3en().clear_bit()),
-                    Channel::NotUsed => {},
                 }
             }
 
@@ -263,7 +245,6 @@ macro_rules! pwm_timer {
                     Channel::CH1 => self.timer.chctl2.modify(|_r, w| w.ch1en().set_bit()),
                     Channel::CH2 => self.timer.chctl2.modify(|_r, w| w.ch2en().set_bit()),
                     Channel::CH3 => self.timer.chctl2.modify(|_r, w| w.ch3en().set_bit()),
-                    Channel::NotUsed => {},
                 }
             }
 
@@ -291,7 +272,6 @@ macro_rules! pwm_timer {
                     Channel::CH1 => self.timer.ch1cv.write(|w| unsafe { w.bits(duty) }),
                     Channel::CH2 => self.timer.ch2cv.write(|w| unsafe { w.bits(duty) }),
                     Channel::CH3 => self.timer.ch3cv.write(|w| unsafe { w.bits(duty) }),
-                    Channel::NotUsed => {},
                 }
                 self.enable(channel);
             }
