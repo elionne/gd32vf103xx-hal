@@ -3,14 +3,14 @@
 use embedded_hal::Pwm;
 use gd32vf103_pac::{TIMER0, TIMER1, TIMER2, TIMER3, TIMER4};
 
-use crate::gpio::{Alternate, PushPull};
+use crate::afio::{Afio, Remap};
 use crate::gpio::gpioa::*;
 use crate::gpio::gpiob::*;
 use crate::gpio::gpioc::*;
 use crate::gpio::gpiod::*;
 use crate::gpio::gpioe::*;
-use crate::rcu::{Rcu, Enable, Reset, BaseFrequency};
-use crate::afio::{Remap, Afio};
+use crate::gpio::{Alternate, PushPull};
+use crate::rcu::{BaseFrequency, Enable, Rcu, Reset};
 use crate::time::{Hertz, U32Ext};
 
 use core::marker::PhantomData;
@@ -35,37 +35,37 @@ macro_rules! pwm_pin {
     }
 }
 
-pwm_pin!{
+pwm_pin! {
     TIMER0,
         NoRemap: [ ch0: PA8, ch1: PA9, ch2: PA10, ch3: PA11 ],
         PartialRemap1: [ ch0: PA8, ch1: PA9, ch2: PA10, ch3: PA11 ],
         FullRemap: [ ch0: PE9, ch1: PE11, ch2: PE13, ch3: PE14 ],
 }
 
-pwm_pin!{
+pwm_pin! {
     TIMER1,
-        NoRemap: [ch0: PA0, ch1: PA1, ch2: PA2, ch3: PA3 ],
-        PartialRemap1: [ch0: PA15, ch1: PB3, ch2: PA2, ch3: PA3 ],
-        PartialRemap2: [ch0: PA0, ch1: PA1, ch2: PB10, ch3: PB11 ],
-        FullRemap: [ch0: PA15, ch1: PB3, ch2: PB10, ch3: PB11 ],
+        NoRemap: [ ch0: PA0, ch1: PA1, ch2: PA2, ch3: PA3 ],
+        PartialRemap1: [ ch0: PA15, ch1: PB3, ch2: PA2, ch3: PA3 ],
+        PartialRemap2: [ ch0: PA0, ch1: PA1, ch2: PB10, ch3: PB11 ],
+        FullRemap: [ ch0: PA15, ch1: PB3, ch2: PB10, ch3: PB11 ],
 }
 
-pwm_pin!{
+pwm_pin! {
     TIMER2,
-        NoRemap: [ch0: PA6, ch1: PA7, ch2: PB0, ch3: PB1 ],
-        PartialRemap2: [ch0: PB4, ch1: PB5, ch2: PB0, ch3: PB1 ],
-        FullRemap: [ch0: PC6, ch1: PC7, ch2: PC8, ch3: PC9 ],
+        NoRemap: [ ch0: PA6, ch1: PA7, ch2: PB0, ch3: PB1 ],
+        PartialRemap2: [ ch0: PB4, ch1: PB5, ch2: PB0, ch3: PB1 ],
+        FullRemap: [ ch0: PC6, ch1: PC7, ch2: PC8, ch3: PC9 ],
 }
 
-pwm_pin!{
+pwm_pin! {
     TIMER3,
         NoRemap: [ ch0: PB6, ch1: PB7, ch2: PB8, ch3: PB9 ],
-        FullRemap: [ ch0: PD12, ch1: PD13, ch2: PD14, ch3: PD15],
+        FullRemap: [ ch0: PD12, ch1: PD13, ch2: PD14, ch3: PD15 ],
 }
 
-pwm_pin!{
+pwm_pin! {
     TIMER4,
-        NoRemap: [ch0: PA0, ch1: PA1, ch2: PA2, ch3: PA3 ],
+        NoRemap: [ ch0: PA0, ch1: PA1, ch2: PA2, ch3: PA3 ],
 }
 
 /// Type [`NoRemap`] represent the timers *no remap mode*, which correspond for
@@ -86,27 +86,39 @@ pub struct PartialRemap2;
 pub struct FullRemap;
 
 impl From<NoRemap> for bool {
-    fn from(_v: NoRemap) -> Self { false }
+    fn from(_v: NoRemap) -> Self {
+        false
+    }
 }
 
 impl From<NoRemap> for u8 {
-    fn from(_v: NoRemap) -> Self { 0b00 }
+    fn from(_v: NoRemap) -> Self {
+        0b00
+    }
 }
 
 impl From<FullRemap> for bool {
-    fn from(_v: FullRemap) -> Self { true }
+    fn from(_v: FullRemap) -> Self {
+        true
+    }
 }
 
 impl From<FullRemap> for u8 {
-    fn from(_v: FullRemap) -> Self { 0b11 }
+    fn from(_v: FullRemap) -> Self {
+        0b11
+    }
 }
 
 impl From<PartialRemap1> for u8 {
-    fn from(_v: PartialRemap1) -> Self { 0b01 }
+    fn from(_v: PartialRemap1) -> Self {
+        0b01
+    }
 }
 
 impl From<PartialRemap2> for u8 {
-    fn from(_v: PartialRemap2) -> Self { 0b11 }
+    fn from(_v: PartialRemap2) -> Self {
+        0b11
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -116,7 +128,6 @@ pub enum Channel {
     CH2,
     CH3,
 }
-
 
 /// PWM TIMER configuration.
 ///
@@ -164,22 +175,22 @@ macro_rules! advanced_pwm_timer {
     ($TIM:ident: $tim:ident) => {
         impl<REMAP: Into<u8>> PwmTimer<$TIM, REMAP> {
             pub fn new(
-              timer: $TIM,
-              pins: impl Pins<$TIM, REMAP>,
-              rcu: &mut Rcu, afio: &mut Afio) -> PwmTimer<$TIM, REMAP>
-            {
-
+                timer: $TIM,
+                pins: impl Pins<$TIM, REMAP>,
+                rcu: &mut Rcu,
+                afio: &mut Afio,
+            ) -> PwmTimer<$TIM, REMAP> {
                 <$TIM>::remap(afio, pins.remap().into());
 
                 $TIM::enable(rcu);
                 $TIM::reset(rcu);
 
                 /* Advanced TIMER implements a BREAK function that deactivates
-                * the outputs. This bit automatically activates the output when
-                * no break input is present */
+                 * the outputs. This bit automatically activates the output when
+                 * no break input is present */
                 timer.cchp.modify(|_, w| w.oaen().set_bit());
 
-                PwmTimer{
+                PwmTimer {
                     timer,
                     timer_clock: $TIM::base_frequency(rcu),
                     max_duty_cycle: 0,
@@ -194,16 +205,16 @@ macro_rules! advanced_pwm_timer {
     };
 }
 
-
 macro_rules! general_pwm_timer {
     ($TIM:ident: $tim:ident) => {
-        impl<REMAP: Into<u8> + Into<bool> > PwmTimer<$TIM, REMAP> {
+        impl<REMAP: Into<u8> + Into<bool>> PwmTimer<$TIM, REMAP> {
             pub fn new<R: Into<u8> + Into<bool>>(
-            timer: $TIM,
-            pins: impl Pins<$TIM, REMAP>,
-            rcu: &mut Rcu, afio: &mut Afio) -> PwmTimer<$TIM, REMAP> {
-
-                 <$TIM>::remap(afio, pins.remap().into());
+                timer: $TIM,
+                pins: impl Pins<$TIM, REMAP>,
+                rcu: &mut Rcu,
+                afio: &mut Afio,
+            ) -> PwmTimer<$TIM, REMAP> {
+                <$TIM>::remap(afio, pins.remap().into());
 
                 $TIM::enable(rcu);
                 $TIM::reset(rcu);
@@ -276,8 +287,10 @@ macro_rules! pwm_timer {
                 self.enable(channel);
             }
 
-            fn set_period<P>(&mut self, period: P) where
-                P: Into<Self::Time> {
+            fn set_period<P>(&mut self, period: P)
+            where
+                P: Into<Self::Time>,
+            {
                 self.timer.ctl0.modify(|_, w| w.cen().clear_bit());
                 self.timer.cnt.reset();
 
@@ -322,11 +335,11 @@ macro_rules! pwm_timer {
                 });
             }
         }
-    }
+    };
 }
 
 advanced_pwm_timer! {TIMER0: timer0}
-general_pwm_timer!  {TIMER1: timer1}
-general_pwm_timer!  {TIMER2: timer2}
-general_pwm_timer!  {TIMER3: timer3}
-general_pwm_timer!  {TIMER4: timer4}
+general_pwm_timer! {TIMER1: timer1}
+general_pwm_timer! {TIMER2: timer2}
+general_pwm_timer! {TIMER3: timer3}
+general_pwm_timer! {TIMER4: timer4}
